@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(powershell -Command \"Get-ChildItem ''C:\\\\Program Files*\\\\Inno*'' -Recurse -Filter ISCC.exe -ErrorAction SilentlyContinue | Select-Object FullName\")",
+      "Bash(powershell -Command \"Get-ChildItem -Path ''C:\\\\Users\\\\cfcfa\\\\AppData\\\\Local\\\\Programs'' -Recurse -Filter ''ISCC.exe'' -ErrorAction SilentlyContinue | Select-Object FullName\")",
+      "PowerShell(Get-MpThreatDetection -ErrorAction SilentlyContinue)",
+      "Bash(python -m PyInstaller --version)",
+      "Bash(ls \"C:\\\\Users\\\\cfcfa\\\\AppData\\\\Local\\\\Programs\\\\Inno Setup 6\\\\ISCC.exe\" 2>&1)",
+      "Read(//c/Users/cfcfa/AppData/Local/Programs/Inno Setup 6/**)",
+      "Bash(\"C:\\\\Users\\\\cfcfa\\\\AppData\\\\Local\\\\Programs\\\\Inno Setup 6\\\\ISCC.exe\" installer.iss)"
+    ]
+  }
+}
