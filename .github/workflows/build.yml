@@ -1,0 +1,36 @@
+name: Build instalador (Windows)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependencias (yt-dlp sempre na versao mais nova)
+        run: |
+          python -m pip install --upgrade pip
+          pip install --upgrade pyinstaller customtkinter yt-dlp imageio-ffmpeg pillow
+
+      - name: Gerar o app com PyInstaller
+        run: python -m PyInstaller app.spec --noconfirm --clean
+
+      - name: Instalar Inno Setup
+        run: choco install innosetup -y --no-progress
+
+      - name: Gerar o instalador
+        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss'
+
+      - name: Publicar o instalador
+        uses: actions/upload-artifact@v4
+        with:
+          name: Setup_MioBaixador
+          path: Output/Setup_MioBaixador.exe
