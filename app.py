@@ -29,22 +29,42 @@ ICON_PATH = _resource_path("icone.ico")
 
 # ── Detecta navegador instalado (fallback de cookies quando o YouTube pede
 #    confirmação "não sou um robô") ──────────────────────────────────────────
+# Firefox vem primeiro: no Windows, Chrome/Edge/Brave/Opera travam o arquivo de
+# cookies enquanto estão abertos e usam criptografia ("app-bound") que o yt-dlp
+# muitas vezes não consegue ler. O Firefox não tem esse problema.
 _BROWSER_PATHS = [
+    ("firefox", r"%PROGRAMFILES%\Mozilla Firefox\firefox.exe"),
+    ("firefox", r"%PROGRAMFILES(X86)%\Mozilla Firefox\firefox.exe"),
     ("chrome",  r"%PROGRAMFILES%\Google\Chrome\Application\chrome.exe"),
     ("chrome",  r"%PROGRAMFILES(X86)%\Google\Chrome\Application\chrome.exe"),
+    ("chrome",  r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"),
     ("edge",    r"%PROGRAMFILES(X86)%\Microsoft\Edge\Application\msedge.exe"),
     ("edge",    r"%PROGRAMFILES%\Microsoft\Edge\Application\msedge.exe"),
     ("opera",   r"%LOCALAPPDATA%\Programs\Opera\opera.exe"),
     ("brave",   r"%PROGRAMFILES%\BraveSoftware\Brave-Browser\Application\brave.exe"),
-    ("firefox", r"%PROGRAMFILES%\Mozilla Firefox\firefox.exe"),
+    ("brave",   r"%LOCALAPPDATA%\BraveSoftware\Brave-Browser\Application\brave.exe"),
 ]
 
 
-def _detect_browser():
-    """Primeiro navegador instalado encontrado (usado com cookiesfrombrowser)."""
+def _detect_browsers():
+    """Todos os navegadores instalados (sem repetir), na ordem de preferência."""
+    achados = []
     for nome, caminho in _BROWSER_PATHS:
-        if os.path.exists(os.path.expandvars(caminho)):
-            return nome
+        if nome not in achados and os.path.exists(os.path.expandvars(caminho)):
+            achados.append(nome)
+    return achados
+
+
+def _cookies_file():
+    """cookies.txt exportado pelo usuário (formato Netscape), se existir.
+    Procura na pasta de config (AppData\\MioBaixador) e ao lado do app/.exe."""
+    pastas = [_CFG_DIR]
+    if _FROZEN:
+        pastas.append(os.path.dirname(sys.executable))
+    for pasta in pastas:
+        caminho = os.path.join(pasta, "cookies.txt")
+        if os.path.isfile(caminho):
+            return caminho
     return None
 
 # ── Auto-instala dependências (só quando roda via Python, não no .exe) ───────
@@ -493,22 +513,49 @@ class App(ctk.CTk):
                 msg = str(e)
                 # YouTube pedindo confirmação anti-bot: tenta de novo usando os
                 # cookies de um navegador instalado (precisa estar logado no YouTube nele)
-                bot_check = "sign in to confirm" in msg.lower() or "not a bot" in msg.lower()
-                navegador = _detect_browser() if bot_check else None
-                if bot_check and navegador:
-                    self.after(0, lambda: self._dl_label.set(
-                        f"Tentando novamente com login do {navegador}..."))
-                    ydl_opts["cookiesfrombrowser"] = (navegador,)
-                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                        ydl.download([url])
-                elif bot_check:
-                    raise Exception(
-                        msg + "\n\nDica: faça login no YouTube pelo Chrome, Edge ou "
-                        "Opera e tente novamente — o app usa o login do navegador "
-                        "automaticamente."
-                    )
-                else:
+                low = msg.lower()
+                bot_check = ("sign in to confirm" in low or "not a bot" in low
+                             or ("cookies" in low and "login" in low))
+                if not bot_check:
                     raise
+
+                # Tentativas em ordem: cookies.txt exportado → cada navegador instalado.
+                # Se um navegador falhar (ex.: Chrome com cookies travados), passa
+                # para o próximo em vez de parar no primeiro erro.
+                tentativas = []
+                arquivo = _cookies_file()
+                if arquivo:
+                    tentativas.append(("cookies.txt", {"cookiefile": arquivo}))
+                for nav in _detect_browsers():
+                    tentativas.append((nav, {"cookiesfrombrowser": (nav,)}))
+
+                falhas = []
+                sucesso = False
+                for nome_fonte, extra in tentativas:
+                    self.after(0, lambda n=nome_fonte: self._dl_label.set(
+                        f"Tentando novamente com login do {n}..."))
+                    opts = {k: v for k, v in ydl_opts.items()
+                            if k not in ("cookiefile", "cookiesfrombrowser")}
+                    opts.update(extra)
+                    try:
+                        with yt_dlp.YoutubeDL(opts) as ydl:
+                            ydl.download([url])
+                        sucesso = True
+                        break
+                    except Exception as e2:
+                        falhas.append(f"• {nome_fonte}: {str(e2).splitlines()[0][:120]}")
+
+                if not sucesso:
+                    detalhes = ("\n".join(falhas) + "\n\n") if falhas else ""
+                    raise Exception(
+                        "O YouTube pediu confirmação de login e não deu para usar "
+                        "os cookies de nenhum navegador.\n\n" + detalhes +
+                        "Como resolver:\n"
+                        "1) Faça login no YouTube pelo Firefox e tente de novo; ou\n"
+                        "2) Feche o Chrome por completo (inclusive em segundo plano); ou\n"
+                        "3) Exporte os cookies do YouTube (extensão \"Get cookies.txt "
+                        f"LOCALLY\") e salve como cookies.txt em:\n{_CFG_DIR}"
+                    )
 
             def _ok():
                 self._prog_bar.set(1)
@@ -523,7 +570,7 @@ class App(ctk.CTk):
             def _err():
                 self._dl_label.set("Erro!")
                 self.status_var.set(f"Erro: {err[:80]}")
-                messagebox.showerror("Erro no download", err[:300], parent=self)
+                messagebox.showerror("Erro no download", err[:1500], parent=self)
             self.after(0, _err)
 
         finally:
