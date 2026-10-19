@@ -18,10 +18,18 @@ jobs:
       - name: Instalar dependencias (yt-dlp sempre na versao mais nova)
         run: |
           python -m pip install --upgrade pip
-          pip install --upgrade pyinstaller customtkinter yt-dlp imageio-ffmpeg pillow
+          pip install --upgrade pyinstaller customtkinter yt-dlp imageio-ffmpeg pillow certifi
 
       - name: Gerar o app com PyInstaller
         run: python -m PyInstaller app.spec --noconfirm --clean
+
+      - name: Testar o .exe gerado (falha o build se o app nao abrir)
+        shell: pwsh
+        run: |
+          $p = Start-Process "dist\MioBaixador\MioBaixador.exe" -ArgumentList "--selftest" -PassThru
+          if (-not $p.WaitForExit(90000)) { $p.Kill(); Write-Error "App travou/mostrou erro no autoteste"; exit 1 }
+          if ($p.ExitCode -ne 0) { Write-Error "Autoteste falhou (codigo $($p.ExitCode))"; exit 1 }
+          Write-Output "Autoteste OK"
 
       - name: Instalar Inno Setup
         run: choco install innosetup -y --no-progress

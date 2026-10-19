@@ -95,6 +95,16 @@ from PIL import Image
 _FFMPEG_BIN = imageio_ffmpeg.get_ffmpeg_exe()
 _YT_DLP_OK  = True
 
+# Autoteste usado pelo build automático: confirma que o .exe empacotado
+# consegue carregar o yt-dlp, os certificados HTTPS e o ffmpeg, sem abrir a janela.
+if "--selftest" in sys.argv:
+    import certifi
+    assert os.path.isfile(certifi.where()), "certifi sem cacert.pem"
+    assert os.path.isfile(_FFMPEG_BIN), "ffmpeg não encontrado"
+    with yt_dlp.YoutubeDL({"quiet": True}) as _ydl:
+        pass
+    sys.exit(0)
+
 from tkinter import filedialog, messagebox
 
 # ── Constantes ───────────────────────────────────────────────────────────────
